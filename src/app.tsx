@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Business, type Product } from "./api.js";
+import { restoreSession, signInWithGoogle, signOut } from "./auth.js";
 
 export function App() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -14,7 +15,9 @@ export function App() {
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<Product | null>(null);
   const [orders, setOrders] = useState<Array<{ uuid: string; status: string; totalAmount: number }>>([]);
-  const role = window.localStorage.getItem("bb_role");
+  const [role, setRole] = useState<string | null>(
+    window.localStorage.getItem("bb_role"),
+  );
   const [businessName, setBusinessName] = useState("");
   const [businessArea, setBusinessArea] = useState("");
   const [productName, setProductName] = useState("");
@@ -38,6 +41,10 @@ export function App() {
       .catch((cause: unknown) =>
         setError(cause instanceof Error ? cause.message : "Unable to load stores."),
       );
+  }, []);
+
+  useEffect(() => {
+    void restoreSession().then(setRole);
   }, []);
 
   useEffect(() => {
@@ -156,6 +163,11 @@ export function App() {
         <p className="eyebrow">Baybay Local Commerce</p>
         <h1>Baybay Basket</h1>
         <p>Find groceries from verified local businesses in Baybay City.</p>
+        {role ? (
+          <button onClick={() => void signOut().then(() => setRole(null))}>Sign out</button>
+        ) : (
+          <button onClick={() => void signInWithGoogle()}>Sign in with Google</button>
+        )}
       </header>
       {error && <p className="error">{error}</p>}
       <section className="toolbar" aria-label="Marketplace filters">
