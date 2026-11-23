@@ -14,6 +14,19 @@ export function App() {
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<Product | null>(null);
   const [orders, setOrders] = useState<Array<{ uuid: string; status: string; totalAmount: number }>>([]);
+  const role = window.localStorage.getItem("bb_role");
+  const [businessName, setBusinessName] = useState("");
+  const [businessArea, setBusinessArea] = useState("");
+  const [productName, setProductName] = useState("");
+  const [productCategory, setProductCategory] = useState("");
+  const [productUnit, setProductUnit] = useState("");
+  const [productPrice, setProductPrice] = useState("0");
+  const [reports, setReports] = useState<Array<{ uuid: string; targetUuid: string; targetType: string; reason: string; status: string }>>([]);
+  const [categories, setCategories] = useState<Array<{ uuid: string; name: string }>>([]);
+  const [categoryName, setCategoryName] = useState("");
+  const [analytics, setAnalytics] = useState<Array<{ name: string; count: number }>>([]);
+  const [retentionDays, setRetentionDays] = useState("365");
+  const [configuration, setConfiguration] = useState("");
 
   useEffect(() => {
     void api
@@ -93,6 +106,47 @@ export function App() {
       setOrders(await api.listOrders());
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "Unable to load orders.");
+    }
+  };
+
+  const saveBusiness = async () => {
+    if (!selectedBusiness) return;
+    try {
+      await api.updateBusiness(selectedBusiness, {
+        name: businessName,
+        serviceArea: businessArea,
+      });
+      setSubmitted("Business profile updated.");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Unable to update the business.");
+    }
+  };
+
+  const createProduct = async () => {
+    if (!selectedBusiness) return;
+    try {
+      await api.createProduct(selectedBusiness, {
+        name: productName,
+        category: productCategory,
+        unitLabel: productUnit,
+        price: Number(productPrice),
+        isAvailable: true,
+      });
+      setProducts(await api.listProducts(selectedBusiness));
+      setSubmitted("Product created.");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Unable to create the product.");
+    }
+  };
+
+  const loadAdminData = async () => {
+    try {
+      setReports(await api.listReports());
+      setCategories(await api.listCategories());
+      setAnalytics(await api.categoryAnalytics());
+      setConfiguration(JSON.stringify(await api.listConfiguration()));
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Unable to load administrator data.");
     }
   };
 
@@ -189,6 +243,63 @@ export function App() {
           <button onClick={() => void submitReport()}>Submit report</button>
           <button className="quiet" onClick={() => setReportTarget(null)}>Cancel</button>
         </div>
+      )}
+      {(role === "business" || role === "platform_admin" || role === "system_admin") && (
+        <section className="basket">
+          <h2>Business management</h2>
+          <label>
+            Store name
+            <input value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
+          </label>
+          <label>
+            Service area
+            <input value={businessArea} onChange={(event) => setBusinessArea(event.target.value)} />
+          </label>
+          <button onClick={() => void saveBusiness()}>Save profile</button>
+          <h3>Add product</h3>
+          <label>Name<input value={productName} onChange={(event) => setProductName(event.target.value)} /></label>
+          <label>Category<input value={productCategory} onChange={(event) => setProductCategory(event.target.value)} /></label>
+          <label>Unit<input value={productUnit} onChange={(event) => setProductUnit(event.target.value)} /></label>
+          <label>Price<input type="number" min="0" value={productPrice} onChange={(event) => setProductPrice(event.target.value)} /></label>
+          <button onClick={() => void createProduct()}>Create product</button>
+        </section>
+      )}
+      {(role === "platform_admin" || role === "system_admin") && (
+        <section className="basket">
+          <h2>Administration</h2>
+          <button onClick={() => void loadAdminData()}>Load moderation and analytics</button>
+          <button onClick={() => {
+            if (selectedBusiness) void api.verifyBusiness(selectedBusiness).then(() => setSubmitted("Business verified."));
+          }}>Verify selected business</button>
+          <h3>Reports</h3>
+          {reports.map((report) => (
+            <p key={report.uuid}>
+              {report.targetType}: {report.reason} ({report.status})
+              <button onClick={() => void api.updateReportStatus(report.uuid, "resolved").then(loadAdminData)}>Resolve</button>
+            </p>
+          ))}
+          <h3>Categories</h3>
+          {categories.map((category) => <p key={category.uuid}>{category.name}</p>)}
+          <label>
+            New category
+            <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} />
+          </label>
+          <button onClick={() => void api.createCategory(categoryName).then(loadAdminData)}>Create category</button>
+          <h3>Thresholded analytics</h3>
+          {analytics.map((item) => <p key={item.name}>{item.name}: {item.count}</p>)}
+        </section>
+      )}
+      {role === "system_admin" && (
+        <section className="basket">
+          <h2>System configuration and retention</h2>
+          <p>{configuration}</p>
+          <label>
+            Retention days
+            <input type="number" min="30" value={retentionDays} onChange={(event) => setRetentionDays(event.target.value)} />
+          </label>
+          <button onClick={() => void api.runRetention(Number(retentionDays))}>Run retention</button>
+          <button onClick={() => void api.backup().then((value) => setSubmitted(JSON.stringify(value)))}>Generate backup snapshot</button>
+        </section>
       )}
     </main>
   );
